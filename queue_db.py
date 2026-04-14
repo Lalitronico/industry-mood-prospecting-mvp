@@ -1,12 +1,12 @@
 """Minimal SQLite-based approval queue for outreach drafts — stdlib only.
 
-Statuses: pending_review → approved | rejected.
+Statuses: pending_review → approved | rejected → sent.
 """
 
 import sqlite3
 from datetime import datetime, timezone
 
-VALID_STATUSES = {"pending_review", "approved", "rejected"}
+VALID_STATUSES = {"pending_review", "approved", "rejected", "sent"}
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS drafts (
@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS drafts (
     contact_name TEXT   NOT NULL,
     status      TEXT    NOT NULL DEFAULT 'pending_review',
     created_at  TEXT    NOT NULL,
-    updated_at  TEXT    NOT NULL
+    updated_at  TEXT    NOT NULL,
+    sent_at     TEXT
 );
 """
 
@@ -89,6 +90,31 @@ def get_draft(db_path: str, draft_id: int) -> dict | None:
     row = conn.execute("SELECT * FROM drafts WHERE id = ?", (draft_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+def list_approved(db_path: str) -> list[dict]:
+    """Return all drafts with status=approved."""
+    conn = _connect(db_path)
+    rows = conn.execute(
+        "SELECT * FROM drafts WHERE status = 'approved' ORDER BY id"
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def mark_sent(db_path: str, draft_id: int) -> None:
+    """Mark a draft as sent and record the timestamp."""
+    now = _now()
+    conn = _connect(db_path)
+    cursor = conn.execute(
+        "UPDATE drafts SET status = 'sent', sent_at = ?, updated_at = ? WHERE id = ?",
+        (now, now, draft_id),
+    )
+    conn.commit()
+    if cursor.rowcount == 0:
+        conn.close()
+        raise ValueError(f"Draft id {draft_id} not found")
+    conn.close()
 
 
 def update_status(db_path: str, draft_id: int, new_status: str) -> None:

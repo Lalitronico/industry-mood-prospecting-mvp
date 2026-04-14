@@ -6,7 +6,10 @@ import tempfile
 
 import pytest
 
-from queue_db import init_queue, enqueue_draft, list_pending, update_status, get_draft
+from queue_db import (
+    init_queue, enqueue_draft, list_pending, update_status, get_draft,
+    list_approved, mark_sent,
+)
 
 
 # --- Fixtures ---
@@ -132,7 +135,7 @@ class TestUpdateStatus:
     def test_invalid_status_raises(self, db):
         draft_id = enqueue_draft(db, _sample_draft())
         with pytest.raises(ValueError):
-            update_status(db, draft_id, "sent")
+            update_status(db, draft_id, "bogus_status")
 
     def test_nonexistent_id_raises(self, db):
         with pytest.raises(ValueError):
@@ -156,3 +159,54 @@ class TestGetDraft:
         draft = get_draft(db, draft_id)
         assert "created_at" in draft
         assert draft["created_at"] is not None
+
+
+# --- sent status ---
+
+class TestSentStatus:
+    def test_update_to_sent(self, db):
+        draft_id = enqueue_draft(db, _sample_draft())
+        update_status(db, draft_id, "approved")
+        update_status(db, draft_id, "sent")
+        draft = get_draft(db, draft_id)
+        assert draft["status"] == "sent"
+
+    def test_sent_at_initially_none(self, db):
+        draft_id = enqueue_draft(db, _sample_draft())
+        draft = get_draft(db, draft_id)
+        assert draft["sent_at"] is None
+
+
+# --- list_approved ---
+
+class TestListApproved:
+    def test_returns_only_approved(self, db):
+        id1 = enqueue_draft(db, _sample_draft())
+        id2 = enqueue_draft(db, _sample_draft())
+        id3 = enqueue_draft(db, _sample_draft())
+        update_status(db, id1, "approved")
+        update_status(db, id3, "rejected")
+        # id2 stays pending
+        approved = list_approved(db)
+        assert len(approved) == 1
+        assert approved[0]["id"] == id1
+
+    def test_empty_when_none_approved(self, db):
+        enqueue_draft(db, _sample_draft())
+        assert list_approved(db) == []
+
+
+# --- mark_sent ---
+
+class TestMarkSent:
+    def test_sets_status_and_timestamp(self, db):
+        draft_id = enqueue_draft(db, _sample_draft())
+        update_status(db, draft_id, "approved")
+        mark_sent(db, draft_id)
+        draft = get_draft(db, draft_id)
+        assert draft["status"] == "sent"
+        assert draft["sent_at"] is not None
+
+    def test_nonexistent_raises(self, db):
+        with pytest.raises(ValueError):
+            mark_sent(db, 9999)

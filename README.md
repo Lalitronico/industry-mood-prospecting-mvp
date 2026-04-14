@@ -16,16 +16,18 @@ Hoy contiene:
 - script de setup de base de datos
 - **scoring module** (`scoring.py`) — funciones puras para normalizar ciudad, clasificar rol, detectar tipo target, puntuar y recomendar leads
 - **draft generator** (`drafts.py`) — templates role-aware (GM/HR/OPS) en español, personalización por empresa/ciudad/tipo/tamaño
-- **approval queue** (`queue_db.py`) — SQLite con estados pending_review/approved/rejected
-- **CLIs de drafts**: `generate_drafts.py`, `list_drafts.py`, `review_draft.py`
-- **75 tests** en `tests/`
+- **approval queue** (`queue_db.py`) — SQLite con estados pending_review/approved/rejected/sent
+- **export utility** (`export_approved.py`) — exporta drafts aprobados a CSV
+- **sender abstraction** (`sender.py`) — dry-run y file-outbox backends
+- **CLIs de drafts**: `generate_drafts.py`, `list_drafts.py`, `review_draft.py`, `send_drafts.py`, `export_approved.py`
+- **99 tests** en `tests/`
 - **profiling y reglas de segmentación** en `docs/excel_profiling_and_segmentation.md`
 - plan replanteado en `MVP_PLAN.md`
 
 La fuente real de leads es un archivo Excel (`Empresarial AAA AA A y B.xlsx`) con 15,615 empresas; 189 locales exactas (Chihuahua + Juárez), todas con email.
 
 No contiene todavía:
-- envío real de campañas
+- envío real de campañas (el sender actual es dry-run o file-outbox; swap a Resend/SMTP solo requiere un nuevo backend)
 - generación de drafts con IA (hoy usa templates; diseñado para swap fácil a LLM)
 
 ## Principio del MVP
@@ -67,7 +69,9 @@ industry-mood-prospecting-mvp/
 │   ├── test_scoring.py
 │   ├── test_importer.py
 │   ├── test_drafts.py
-│   └── test_queue.py
+│   ├── test_queue.py
+│   ├── test_export.py
+│   └── test_sender.py
 ├── scoring.py
 ├── importer.py
 ├── import_leads.py
@@ -76,6 +80,9 @@ industry-mood-prospecting-mvp/
 ├── generate_drafts.py
 ├── list_drafts.py
 ├── review_draft.py
+├── export_approved.py
+├── sender.py
+├── send_drafts.py
 ├── MVP_PLAN.md
 ├── README.md
 └── requirements.txt
@@ -186,10 +193,29 @@ python review_draft.py reject 2         # rechazar draft #2
 python review_draft.py approve 1 2 3    # aprobar varios
 ```
 
+### 4. Exportar drafts aprobados a CSV
+
+```bash
+python export_approved.py --db drafts_queue.db -o approved.csv   # write CSV file
+python export_approved.py --db drafts_queue.db                   # print to stdout
+```
+
+### 5. Enviar drafts aprobados
+
+```bash
+# Dry run — solo imprime lo que se enviaría
+python send_drafts.py --db drafts_queue.db --mode dry-run
+
+# File outbox — escribe un archivo .txt por draft en outbox/
+python send_drafts.py --db drafts_queue.db --mode file-outbox --outbox outbox/
+```
+
+Los drafts enviados cambian a status `sent` con timestamp. No se reenvían en ejecuciones posteriores.
+
 ### Arquitectura de drafts
 
 - `drafts.py` — módulo de generación con templates por rol (GM/HR/OPS). Diseñado para que un LLM reemplace solo `generate_draft()` sin tocar el resto del pipeline.
-- `queue_db.py` — cola SQLite con `init_queue`, `enqueue_draft`, `list_pending`, `get_draft`, `update_status`. Estados: `pending_review` → `approved` | `rejected`.
+- `queue_db.py` — cola SQLite con `init_queue`, `enqueue_draft`, `list_pending`, `list_approved`, `get_draft`, `update_status`, `mark_sent`. Estados: `pending_review` → `approved` | `rejected` → `sent`.
 
 ## Próxima implementación recomendada
 

@@ -25,7 +25,7 @@ def _list_all(db_path: str) -> list[dict]:
 
 
 def _print_draft(d: dict, show_body: bool = True):
-    status_icon = {"pending_review": "⏳", "approved": "✅", "rejected": "❌"}.get(
+    status_icon = {"pending_review": "⏳", "approved": "✅", "rejected": "❌", "sent": "📤"}.get(
         d["status"], "?"
     )
     print(f"--- Draft #{d['id']} {status_icon} [{d['status']}] ---")
@@ -61,7 +61,7 @@ def main():
 
     if args.short:
         for d in drafts:
-            icon = {"pending_review": "⏳", "approved": "✅", "rejected": "❌"}.get(d["status"], "?")
+            icon = {"pending_review": "⏳", "approved": "✅", "rejected": "❌", "sent": "📤"}.get(d["status"], "?")
             print(f"  {icon} #{d['id']:3} | {d['template_key']:3} | {d['company'][:35]:<35} | {d['email']:<35} | {d['status']}")
         print(f"\n{len(drafts)} draft(s)")
     else:
