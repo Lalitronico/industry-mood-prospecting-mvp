@@ -15,17 +15,18 @@ Hoy contiene:
 - modelos iniciales
 - script de setup de base de datos
 - **scoring module** (`scoring.py`) — funciones puras para normalizar ciudad, clasificar rol, detectar tipo target, puntuar y recomendar leads
-- **20 tests** en `tests/test_scoring.py`
+- **draft generator** (`drafts.py`) — templates role-aware (GM/HR/OPS) en español, personalización por empresa/ciudad/tipo/tamaño
+- **approval queue** (`queue_db.py`) — SQLite con estados pending_review/approved/rejected
+- **CLIs de drafts**: `generate_drafts.py`, `list_drafts.py`, `review_draft.py`
+- **75 tests** en `tests/`
 - **profiling y reglas de segmentación** en `docs/excel_profiling_and_segmentation.md`
 - plan replanteado en `MVP_PLAN.md`
 
 La fuente real de leads es un archivo Excel (`Empresarial AAA AA A y B.xlsx`) con 15,615 empresas; 189 locales exactas (Chihuahua + Juárez), todas con email.
 
 No contiene todavía:
-- importador Excel (siguiente paso)
-- generación de drafts con IA
-- approval queue funcional
 - envío real de campañas
+- generación de drafts con IA (hoy usa templates; diseñado para swap fácil a LLM)
 
 ## Principio del MVP
 
@@ -63,8 +64,18 @@ industry-mood-prospecting-mvp/
 │   └── setup_db.py
 ├── tests/
 │   ├── __init__.py
-│   └── test_scoring.py
+│   ├── test_scoring.py
+│   ├── test_importer.py
+│   ├── test_drafts.py
+│   └── test_queue.py
 ├── scoring.py
+├── importer.py
+├── import_leads.py
+├── drafts.py
+├── queue_db.py
+├── generate_drafts.py
+├── list_drafts.py
+├── review_draft.py
 ├── MVP_PLAN.md
 ├── README.md
 └── requirements.txt
@@ -148,14 +159,46 @@ source .venv/bin/activate
 python -m pytest tests/ -v
 ```
 
+## Draft Generation & Approval Queue
+
+### 1. Generar drafts desde Excel a la cola de aprobación
+
+```bash
+python generate_drafts.py "/mnt/c/Users/HP ZBOOK/Downloads/Empresarial AAA AA A y B.xlsx"
+```
+
+Esto importa leads recomendados, genera un draft personalizado por cada uno (template role-aware en español), y los inserta en `drafts_queue.db` con status `pending_review`.
+
+### 2. Ver drafts pendientes
+
+```bash
+python list_drafts.py                   # ver pendientes con cuerpo completo
+python list_drafts.py --short           # resumen en una línea por draft
+python list_drafts.py --all             # ver todos (incluyendo aprobados/rechazados)
+python list_drafts.py --all --short     # resumen completo
+```
+
+### 3. Aprobar o rechazar drafts
+
+```bash
+python review_draft.py approve 1        # aprobar draft #1
+python review_draft.py reject 2         # rechazar draft #2
+python review_draft.py approve 1 2 3    # aprobar varios
+```
+
+### Arquitectura de drafts
+
+- `drafts.py` — módulo de generación con templates por rol (GM/HR/OPS). Diseñado para que un LLM reemplace solo `generate_draft()` sin tocar el resto del pipeline.
+- `queue_db.py` — cola SQLite con `init_queue`, `enqueue_draft`, `list_pending`, `get_draft`, `update_status`. Estados: `pending_review` → `approved` | `rejected`.
+
 ## Próxima implementación recomendada
 
 Orden sugerido:
 1. ~~importador Excel~~ ✓
-2. simplificación de modelos al alcance real del MVP
-3. generación de emails con API de Claude/GPT
-4. interfaz mínima de aprobación
-5. envío básico con Resend o flujo manual asistido
+2. ~~generación de drafts + cola de aprobación~~ ✓
+3. swap de templates a generación con LLM (Claude/GPT)
+4. envío básico con Resend o flujo manual asistido
+5. secuencia simple de 3 pasos
 
 > **Nota:** el repo ya no depende de scraping ni Apollo. La fuente primaria es el archivo Excel con datos empresariales reales.
 
