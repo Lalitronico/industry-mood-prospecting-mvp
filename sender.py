@@ -38,11 +38,18 @@ class FileOutboxBackend:
 
 def send_approved(db_path: str, backend) -> int:
     """Send all approved drafts using the given backend. Returns count sent."""
-    from queue_db import list_approved, mark_sent
+    from queue_db import has_terminal_status, is_suppressed, list_approved, mark_sent, update_status
 
     drafts = list_approved(db_path)
     count = 0
     for draft in drafts:
+        if is_suppressed(db_path, draft["email"]) or has_terminal_status(
+            db_path,
+            draft["email"],
+            draft.get("campaign_name", "first_wave_local"),
+        ):
+            update_status(db_path, draft["id"], "suppressed")
+            continue
         ok = backend.send(draft)
         if ok:
             mark_sent(db_path, draft["id"])

@@ -11,7 +11,7 @@ Usage:
 import argparse
 import sys
 
-from queue_db import update_status, get_draft
+from queue_db import get_draft, update_status
 
 
 DEFAULT_DB = "drafts_queue.db"
@@ -25,15 +25,15 @@ def main():
     args = parser.parse_args()
 
     status = "approved" if args.action == "approve" else "rejected"
-    icon = "✅" if args.action == "approve" else "❌"
+    label = "OK" if args.action == "approve" else "REJECTED"
 
     for draft_id in args.ids:
         try:
             update_status(args.db, draft_id, status)
             draft = get_draft(args.db, draft_id)
-            print(f"  {icon} #{draft_id} {status} — {draft['company']} ({draft['email']})")
+            print(f"  {label} #{draft_id} {status} - {draft['company']} ({draft['email']})")
         except ValueError as e:
-            print(f"  ⚠ #{draft_id}: {e}", file=sys.stderr)
+            print(f"  WARN #{draft_id}: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":

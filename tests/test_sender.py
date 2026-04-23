@@ -5,7 +5,7 @@ import tempfile
 
 import pytest
 
-from queue_db import init_queue, enqueue_draft, update_status, get_draft
+from queue_db import init_queue, enqueue_draft, update_status, get_draft, suppress_email
 from sender import send_approved, DryRunBackend, FileOutboxBackend
 
 
@@ -151,3 +151,23 @@ class TestSendApproved:
         assert len(os.listdir(outbox)) == 1
         draft = get_draft(db, id1)
         assert draft["status"] == "sent"
+
+    def test_suppressed_approved_draft_is_not_sent(self, db):
+        id1 = enqueue_draft(db, _sample())
+        _approve(db, id1)
+        suppress_email(db, "a@aceros.mx", reason="unsubscribed")
+        backend = DryRunBackend()
+        sent_count = send_approved(db, backend)
+        draft = get_draft(db, id1)
+        assert sent_count == 0
+        assert draft["status"] == "suppressed"
+
+    def test_replied_contact_blocks_approved_followup_send(self, db):
+        id1 = enqueue_draft(db, _sample())
+        id2 = enqueue_draft(db, {**_sample(), "step_number": 2})
+        update_status(db, id1, "replied")
+        _approve(db, id2)
+        backend = DryRunBackend()
+        sent_count = send_approved(db, backend)
+        assert sent_count == 0
+        assert get_draft(db, id2)["status"] == "suppressed"

@@ -213,5 +213,5 @@ class ActivityLog(Base):
     lead_id = Column(Integer, ForeignKey("leads.id"))
     activity_type = Column(String(50))  # email_sent, email_opened, reply_received, etc.
     description = Column(Text)
-    metadata = Column(Text)  # JSON string
+    metadata_json = Column("metadata", Text)  # JSON string
     created_at = Column(DateTime(timezone=True), server_default=func.now())

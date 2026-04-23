@@ -184,3 +184,25 @@ class TestRecommend:
             "has_email": True,
         }
         assert recommend(lead) is False
+
+    def test_non_target_type_not_recommended_even_if_score_is_high(self):
+        lead = {
+            "city": "Chihuahua, Chih.",
+            "role": "Director General",
+            "company_type": "Constructora",
+            "size": "AAA",
+            "has_email": True,
+        }
+        assert score_lead(lead) >= 65
+        assert recommend(lead) is False
+
+    def test_size_b_not_recommended_even_if_score_is_high(self):
+        lead = {
+            "city": "Juárez, Chih.",
+            "role": "Gerente de RH",
+            "company_type": "Empresa comercial",
+            "size": "B",
+            "has_email": True,
+        }
+        assert score_lead(lead) >= 65
+        assert recommend(lead) is False

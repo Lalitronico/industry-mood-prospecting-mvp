@@ -39,6 +39,12 @@ ENV/
 *.sqlite
 *.sqlite3
 
+# Prospecting data and exports
+*.xlsx
+*.xls
+*.csv
+outbox/
+
 # Environment variables
 .env
 .env.local

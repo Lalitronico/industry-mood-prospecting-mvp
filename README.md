@@ -1,234 +1,300 @@
 # Industry Mood Prospecting MVP
 
-Sistema semi-autónomo de prospección B2B para Industry Mood.
+Sistema semi-autónomo de prospección B2B para generar demos de Industry Mood.
 
-Objetivo inmediato:
-validar un workflow pequeño y operable que ayude a generar 2-3 demos mensuales para el SaaS de pulse surveys de Industry Mood, con revisión humana en cada mensaje.
+El repositorio implementa un workflow pequeño, barato y auditable para convertir una base Excel de empresas en drafts de outreach revisables, con cola de aprobación, suppression list, envío controlado y secuencia simple de 3 pasos.
 
-## Estado actual
+La métrica principal no es número de features. La métrica principal es demos agendadas.
 
-Repositorio en reorientación hacia **Excel import + segmentation**.
+## Estado Actual
 
-Hoy contiene:
-- esqueleto FastAPI (backend ligero)
-- conexión SQLite con SQLAlchemy
-- modelos iniciales
-- script de setup de base de datos
-- **scoring module** (`scoring.py`) — funciones puras para normalizar ciudad, clasificar rol, detectar tipo target, puntuar y recomendar leads
-- **draft generator** (`drafts.py`) — templates role-aware (GM/HR/OPS) en español, personalización por empresa/ciudad/tipo/tamaño
-- **approval queue** (`queue_db.py`) — SQLite con estados pending_review/approved/rejected/sent
-- **export utility** (`export_approved.py`) — exporta drafts aprobados a CSV
-- **sender abstraction** (`sender.py`) — dry-run y file-outbox backends
-- **CLIs de drafts**: `generate_drafts.py`, `list_drafts.py`, `review_draft.py`, `send_drafts.py`, `export_approved.py`
-- **99 tests** en `tests/`
-- **profiling y reglas de segmentación** en `docs/excel_profiling_and_segmentation.md`
-- plan replanteado en `MVP_PLAN.md`
+Estado: MVP operativo local, human-in-the-loop.
 
-La fuente real de leads es un archivo Excel (`Empresarial AAA AA A y B.xlsx`) con 15,615 empresas; 189 locales exactas (Chihuahua + Juárez), todas con email.
+Ya funciona:
 
-No contiene todavía:
-- envío real de campañas (el sender actual es dry-run o file-outbox; swap a Resend/SMTP solo requiere un nuevo backend)
-- generación de drafts con IA (hoy usa templates; diseñado para swap fácil a LLM)
+- Importar y puntuar leads desde `Empresarial AAA AA A y B.xlsx`.
+- Filtrar una primera ola estricta del ICP local.
+- Generar drafts personalizados por rol: GM, HR y OPS.
+- Evitar duplicados al correr el generador varias veces.
+- Revisar, aprobar, rechazar y listar drafts.
+- Suprimir emails para no volver a contactarlos.
+- Exportar drafts aprobados a CSV.
+- Simular envío con `dry-run` o escribir mensajes a `outbox/`.
+- Marcar drafts como enviados.
+- Generar follow-ups vencidos para una secuencia de 3 pasos.
+- Marcar respuestas y rebotes para detener la secuencia.
+- Levantar un backend FastAPI mínimo con `/health`.
+- Correr una suite de tests automatizados.
 
-## Principio del MVP
+No funciona todavía:
 
-Este proyecto ya no debe entenderse como una plataforma de sales automation completa.
-Debe entenderse como un workflow asistido para:
-1. importar leads reales,
-2. generar drafts personalizados,
-3. aprobarlos manualmente,
-4. enviarlos,
-5. aprender qué convierte a demo.
+- Envío real por Resend, SMTP, Gmail o Outlook.
+- Generación de drafts con LLM.
+- Tracking automático de replies desde inbox.
+- UI web de aprobación.
+- CRM completo o dashboard comercial.
 
-## Alcance inmediato
+## Datos Verificados
 
-Fases prioritarias:
-1. Validación de lista de leads
-2. Generación y aprobación de drafts
-3. Envío básico
-4. Secuencia simple de 3 pasos
-5. Iteración comercial
+Fuente local esperada:
 
-Detalles completos en `MVP_PLAN.md`.
-
-## Estructura actual
-
-```text
-industry-mood-prospecting-mvp/
-├── app/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── database.py
-│   └── models.py
-├── docs/
-│   └── excel_profiling_and_segmentation.md
-├── scripts/
-│   └── setup_db.py
-├── tests/
-│   ├── __init__.py
-│   ├── test_scoring.py
-│   ├── test_importer.py
-│   ├── test_drafts.py
-│   ├── test_queue.py
-│   ├── test_export.py
-│   └── test_sender.py
-├── scoring.py
-├── importer.py
-├── import_leads.py
-├── drafts.py
-├── queue_db.py
-├── generate_drafts.py
-├── list_drafts.py
-├── review_draft.py
-├── export_approved.py
-├── sender.py
-├── send_drafts.py
-├── MVP_PLAN.md
-├── README.md
-└── requirements.txt
+```bash
+Empresarial AAA AA A y B.xlsx
 ```
 
-## Quick start
+El Excel real está ignorado por Git porque contiene datos de prospectos.
 
-### 1. Crear entorno
+Resultados verificados con el archivo actual:
+
+- 15,617 contactos deduplicados.
+- 189 contactos locales en Chihuahua/Juárez.
+- 66 contactos recomendados para primera ola estricta.
+- 37 empresas únicas en la primera ola.
+
+Reglas de recomendación estricta:
+
+- Tiene email.
+- Ciudad normalizada a `chihuahua` o `juarez`.
+- Rol prioritario: GM, HR u OPS.
+- Tipo de empresa objetivo.
+- Tamaño A, AA o AAA.
+- Score mínimo de 65.
+
+## Arquitectura
+
+Módulos principales:
+
+- `importer.py`: lee el Excel con `zipfile` y `xml`, sin depender de `openpyxl`.
+- `scoring.py`: normaliza ciudad, clasifica rol, calcula score y recomienda leads.
+- `drafts.py`: genera emails de step 1, step 2 y step 3 con templates por rol.
+- `queue_db.py`: maneja la cola SQLite, estados, suppression list y reglas de follow-up.
+- `sender.py`: abstrae el envío con backends `dry-run` y `file-outbox`.
+- `app/main.py`: API FastAPI mínima.
+
+CLIs disponibles:
+
+- `import_leads.py`: importa, puntúa y exporta leads.
+- `generate_drafts.py`: genera drafts iniciales.
+- `list_drafts.py`: lista drafts pendientes o todos los estados.
+- `review_draft.py`: aprueba o rechaza drafts.
+- `suppress_email.py`: agrega/lista emails suprimidos.
+- `send_drafts.py`: envía drafts aprobados usando backend controlado.
+- `generate_followups.py`: genera follow-ups vencidos.
+- `mark_outcome.py`: marca replies o bounces.
+- `export_approved.py`: exporta drafts aprobados a CSV.
+
+Estados de draft:
+
+- `pending_review`: listo para revisión humana.
+- `approved`: aprobado para envío.
+- `rejected`: descartado.
+- `suppressed`: bloqueado por suppression list, reply, bounce o decisión manual.
+- `sent`: enviado o procesado por backend de salida.
+- `replied`: el contacto respondió; se detiene la secuencia.
+- `bounced`: el email rebotó; se suprime el contacto.
+
+## Setup
+
+Crear entorno:
 
 ```bash
 python -m venv venv
-source venv/bin/activate
+venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Inicializar base de datos
+Inicializar base de datos del backend:
 
 ```bash
-python scripts/setup_db.py
+python scripts\setup_db.py
 ```
 
-### 3. Correr API
+Correr API:
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-### 4. Endpoints actuales
+Endpoints actuales:
 
 - `GET /`
 - `GET /health`
 - Docs: `http://localhost:8000/docs`
 
-## Stack actual
+## Workflow Operativo
 
-- FastAPI
-- SQLAlchemy
-- SQLite
-- Python
-
-## Excel Importer
-
-The importer reads the EMPRESARIAL sheet from the source `.xlsx` file using only Python stdlib (`zipfile` + `xml`). No openpyxl needed.
-
-### Dry-run (summary only)
+### 1. Importar y revisar universo de leads
 
 ```bash
-python import_leads.py "/mnt/c/Users/HP ZBOOK/Downloads/Empresarial AAA AA A y B.xlsx"
+python import_leads.py "Empresarial AAA AA A y B.xlsx"
 ```
 
-### Export recommended leads to CSV
+Exportar recomendados:
 
 ```bash
-python import_leads.py "/mnt/c/Users/HP ZBOOK/Downloads/Empresarial AAA AA A y B.xlsx" -o recommended.csv
+python import_leads.py "Empresarial AAA AA A y B.xlsx" -o recommended.csv
 ```
 
-### Export ALL leads (including non-recommended)
+Exportar todos:
 
 ```bash
-python import_leads.py "/mnt/c/Users/HP ZBOOK/Downloads/Empresarial AAA AA A y B.xlsx" --all -o all_leads.csv
+python import_leads.py "Empresarial AAA AA A y B.xlsx" --all -o all_leads.csv
 ```
 
-### How it works
-
-1. `importer.py` parses the `.xlsx` via `zipfile` + `xml.etree`
-2. Maps columns (A=Compañía, B=Puesto, C=Nombre, D=Email, E=Tipo, F=Tamaño, J=Ciudad)
-3. Normalizes and scores each lead via `scoring.py`
-4. Deduplicates by (company, email)
-5. Restricts first-wave recommendations to local GM/HR/OPS contacts
-6. `import_leads.py` prints a summary and optionally writes a CSV
-
-Current verified output on Eduardo's file:
-- 15,617 deduplicated contact rows
-- 81 recommended first-wave contacts
-- 45 unique companies in the recommended set
-
-### Running tests
+### 2. Generar drafts iniciales
 
 ```bash
-source .venv/bin/activate
-python -m pytest tests/ -v
+python generate_drafts.py "Empresarial AAA AA A y B.xlsx"
 ```
 
-## Draft Generation & Approval Queue
+El comando es idempotente. Si ya existe un draft para el mismo email, campaña y paso, no lo duplica.
 
-### 1. Generar drafts desde Excel a la cola de aprobación
+### 3. Revisar drafts
+
+Ver pendientes completos:
 
 ```bash
-python generate_drafts.py "/mnt/c/Users/HP ZBOOK/Downloads/Empresarial AAA AA A y B.xlsx"
+python list_drafts.py
 ```
 
-Esto importa leads recomendados, genera un draft personalizado por cada uno (template role-aware en español), y los inserta en `drafts_queue.db` con status `pending_review`.
-
-### 2. Ver drafts pendientes
+Ver resumen:
 
 ```bash
-python list_drafts.py                   # ver pendientes con cuerpo completo
-python list_drafts.py --short           # resumen en una línea por draft
-python list_drafts.py --all             # ver todos (incluyendo aprobados/rechazados)
-python list_drafts.py --all --short     # resumen completo
+python list_drafts.py --short
 ```
 
-### 3. Aprobar o rechazar drafts
+Ver todos los estados:
 
 ```bash
-python review_draft.py approve 1        # aprobar draft #1
-python review_draft.py reject 2         # rechazar draft #2
-python review_draft.py approve 1 2 3    # aprobar varios
+python list_drafts.py --all --short
 ```
 
-### 4. Exportar drafts aprobados a CSV
+### 4. Aprobar o rechazar
 
 ```bash
-python export_approved.py --db drafts_queue.db -o approved.csv   # write CSV file
-python export_approved.py --db drafts_queue.db                   # print to stdout
+python review_draft.py approve 1
+python review_draft.py reject 2
+python review_draft.py approve 1 2 3
 ```
 
-### 5. Enviar drafts aprobados
+### 5. Suprimir contactos
 
 ```bash
-# Dry run — solo imprime lo que se enviaría
+python suppress_email.py add contacto@empresa.com --reason unsubscribed
+python suppress_email.py list
+```
+
+La suppression list evita nuevos drafts y bloquea el envío de drafts aprobados para ese email.
+
+### 6. Enviar aprobados de forma controlada
+
+Dry run:
+
+```bash
 python send_drafts.py --db drafts_queue.db --mode dry-run
+```
 
-# File outbox — escribe un archivo .txt por draft en outbox/
+File outbox:
+
+```bash
 python send_drafts.py --db drafts_queue.db --mode file-outbox --outbox outbox/
 ```
 
-Los drafts enviados cambian a status `sent` con timestamp. No se reenvían en ejecuciones posteriores.
+Los drafts enviados pasan a `sent` y no se reenvían.
 
-### Arquitectura de drafts
+### 7. Generar follow-ups
 
-- `drafts.py` — módulo de generación con templates por rol (GM/HR/OPS). Diseñado para que un LLM reemplace solo `generate_draft()` sin tocar el resto del pipeline.
-- `queue_db.py` — cola SQLite con `init_queue`, `enqueue_draft`, `list_pending`, `list_approved`, `get_draft`, `update_status`, `mark_sent`. Estados: `pending_review` → `approved` | `rejected` → `sent`.
+```bash
+python generate_followups.py --db drafts_queue.db
+```
 
-## Próxima implementación recomendada
+Solo step 2:
 
-Orden sugerido:
-1. ~~importador Excel~~ ✓
-2. ~~generación de drafts + cola de aprobación~~ ✓
-3. swap de templates a generación con LLM (Claude/GPT)
-4. envío básico con Resend o flujo manual asistido
-5. secuencia simple de 3 pasos
+```bash
+python generate_followups.py --db drafts_queue.db --step 2
+```
 
-> **Nota:** el repo ya no depende de scraping ni Apollo. La fuente primaria es el archivo Excel con datos empresariales reales.
+Solo step 3:
 
-## Nota estratégica
+```bash
+python generate_followups.py --db drafts_queue.db --step 3
+```
 
-La métrica principal de este proyecto no es número de features construidas.
-La métrica principal es demos agendadas.
+Reglas actuales:
+
+- Step 2 se genera 4 días después de enviar step 1.
+- Step 3 se genera 7 días después de enviar step 2.
+- Si el contacto está `replied`, `bounced` o `suppressed`, no se generan más follow-ups.
+- Si ya existe el siguiente paso, no se duplica.
+
+### 8. Marcar resultados
+
+```bash
+python mark_outcome.py replied 12 --db drafts_queue.db
+python mark_outcome.py bounced 13 --db drafts_queue.db
+```
+
+`replied` detiene la secuencia y suprime drafts pendientes/aprobados del mismo contacto.
+
+`bounced` detiene la secuencia y agrega el email a la suppression list.
+
+### 9. Exportar aprobados
+
+```bash
+python export_approved.py --db drafts_queue.db -o approved.csv
+python export_approved.py --db drafts_queue.db
+```
+
+## Seguridad de Datos
+
+Archivos ignorados por Git:
+
+- `*.xlsx`
+- `*.xls`
+- `*.csv`
+- `*.db`
+- `*.sqlite`
+- `outbox/`
+- `.env`
+
+Esto evita subir el Excel de leads, bases SQLite locales, exports y mensajes generados.
+
+## Tests
+
+```bash
+python -m pytest -q
+```
+
+Estado actual:
+
+```text
+128 passed
+```
+
+## Roadmap
+
+Completado:
+
+- Importador Excel.
+- Scoring estricto del ICP.
+- Drafts iniciales con aprobación humana.
+- Cola SQLite idempotente.
+- Suppression list.
+- Secuencia de 3 pasos.
+- Estados de reply/bounce.
+- Sender controlado sin envío real.
+- Smoke test de FastAPI.
+
+Siguiente recomendado:
+
+1. Integrar envío real con Resend o SMTP.
+2. Agregar configuración de dominio y deliverability: SPF, DKIM y DMARC.
+3. Agregar LLM para drafts con contexto real de cada empresa.
+4. Crear una UI mínima de revisión/aprobación.
+5. Registrar métricas comerciales: sent, replied, positive reply, demo booked.
+
+## Nota Estratégica
+
+Este repo no debe convertirse todavía en una plataforma grande de sales automation.
+
+La versión correcta del MVP es un sistema pequeño, medible y supervisado que ayude a validar si el canal puede generar demos para Industry Mood sin poner en riesgo reputación, deliverability ni cumplimiento.

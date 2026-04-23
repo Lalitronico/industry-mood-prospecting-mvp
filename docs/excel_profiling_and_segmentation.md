@@ -45,13 +45,13 @@ A lead is recommended for initial Industry Mood outreach when **all** of the fol
 2. **Local geography** — city normalizes to `chihuahua` or `juarez` (+40 pts).
 3. **Priority role** — GM or HR (+20 pts) or OPS (+15 pts). `OTHER` roles are explicitly excluded from first-wave recommendation.
 4. **Target company type** — one of the 11 types listed above (+20 pts).
-5. **Size A or above** — AAA (+20), AA (+15), A (+10), B (+5).
+5. **Size A or above** — AAA (+20), AA (+15), A (+10). B still receives score points for analysis, but is excluded from the first-wave recommendation gate.
 
-Score range: 0-100. Recommend threshold: **65**, plus the hard gate that the role must be GM/HR/OPS.
+Score range: 0-100. Recommend threshold: **65**, plus hard gates for local geography, priority role, target company type, and A/AA/AAA size.
 
 ### Expected first-wave size
 
-Using the current heuristic, the sheet yields roughly **81 recommended contact rows**, which collapse to about **45 unique companies** once multiple contacts per company are grouped. That is a good first outreach wave for a tightly controlled, human-reviewed MVP.
+Using the strict first-wave gates, the sheet yields **66 recommended contact rows**, which collapse to **37 unique companies** once multiple contacts per company are grouped. That is a tighter first outreach wave for a controlled, human-reviewed MVP.
 
 ### Scoring module
 

@@ -34,6 +34,7 @@ TARGET_TYPES = {
 }
 
 SIZE_POINTS = {"AAA": 20, "AA": 15, "A": 10, "B": 5}
+PRIORITY_SIZES = {"AAA", "AA", "A"}
 
 ROLE_PATTERNS = {
     "GM": re.compile(
@@ -134,13 +135,18 @@ def recommend(lead: dict) -> bool:
     """Return True if the lead should be in the first-wave outreach shortlist.
 
     First wave is intentionally restricted to local leads with priority roles
-    (GM/HR/OPS). Other local roles can remain in the imported dataset but should
-    not be pushed into the initial outreach batch.
+    (GM/HR/OPS), target company types, and A+ company sizes. Other local leads
+    can remain in the imported dataset but should not be pushed into the initial
+    outreach batch.
     """
     if not lead.get("has_email"):
         return False
     if normalize_city(lead.get("city")) not in LOCAL_CITIES:
         return False
     if classify_role(lead.get("role")) == "OTHER":
+        return False
+    if not is_target_type(lead.get("company_type")):
+        return False
+    if (lead.get("size") or "").upper().strip() not in PRIORITY_SIZES:
         return False
     return score_lead(lead) >= RECOMMEND_THRESHOLD

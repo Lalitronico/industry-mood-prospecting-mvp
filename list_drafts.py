@@ -8,13 +8,21 @@ Usage:
 """
 
 import argparse
-import sqlite3
 import sys
 
-from queue_db import list_pending, _connect
+from queue_db import _connect, list_pending
 
 
 DEFAULT_DB = "drafts_queue.db"
+STATUS_LABELS = {
+    "pending_review": "PENDING",
+    "approved": "APPROVED",
+    "rejected": "REJECTED",
+    "sent": "SENT",
+    "suppressed": "SUPPRESSED",
+    "replied": "REPLIED",
+    "bounced": "BOUNCED",
+}
 
 
 def _list_all(db_path: str) -> list[dict]:
@@ -25,16 +33,14 @@ def _list_all(db_path: str) -> list[dict]:
 
 
 def _print_draft(d: dict, show_body: bool = True):
-    status_icon = {"pending_review": "⏳", "approved": "✅", "rejected": "❌", "sent": "📤"}.get(
-        d["status"], "?"
-    )
-    print(f"--- Draft #{d['id']} {status_icon} [{d['status']}] ---")
+    status_label = STATUS_LABELS.get(d["status"], "?")
+    print(f"--- Draft #{d['id']} [{status_label}] ---")
     print(f"  To:       {d['contact_name']} <{d['email']}>")
     print(f"  Company:  {d['company']}")
     print(f"  Template: {d['template_key']}")
     print(f"  Subject:  {d['subject']}")
     if show_body:
-        print(f"  Body:")
+        print("  Body:")
         for line in d["body_text"].split("\n"):
             print(f"    {line}")
     print()
@@ -51,7 +57,7 @@ def main():
         drafts = _list_all(args.db) if args.all else list_pending(args.db)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
-        print(f"Hint: run generate_drafts.py first to create the queue DB.", file=sys.stderr)
+        print("Hint: run generate_drafts.py first to create the queue DB.", file=sys.stderr)
         sys.exit(1)
 
     if not drafts:
@@ -61,8 +67,11 @@ def main():
 
     if args.short:
         for d in drafts:
-            icon = {"pending_review": "⏳", "approved": "✅", "rejected": "❌", "sent": "📤"}.get(d["status"], "?")
-            print(f"  {icon} #{d['id']:3} | {d['template_key']:3} | {d['company'][:35]:<35} | {d['email']:<35} | {d['status']}")
+            label = STATUS_LABELS.get(d["status"], "?")
+            print(
+                f"  {label:8} #{d['id']:3} | {d['template_key']:3} | "
+                f"{d['company'][:35]:<35} | {d['email']:<35} | {d['status']}"
+            )
         print(f"\n{len(drafts)} draft(s)")
     else:
         for d in drafts:

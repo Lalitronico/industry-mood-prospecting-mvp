@@ -1,6 +1,6 @@
 """Tests for draft generation module — written before implementation (TDD)."""
 
-from drafts import generate_draft, TEMPLATES
+from drafts import FOLLOW_UP_TEMPLATES, TEMPLATES, generate_draft
 
 
 # --- Helper lead fixtures ---
@@ -63,6 +63,11 @@ class TestTemplatesExist:
         for role, tpl in TEMPLATES.items():
             assert "subject" in tpl, f"Missing subject for {role}"
             assert "body" in tpl, f"Missing body for {role}"
+
+    def test_follow_up_templates_exist_for_steps_two_and_three(self):
+        assert set(FOLLOW_UP_TEMPLATES) == {2, 3}
+        for step_templates in FOLLOW_UP_TEMPLATES.values():
+            assert {"GM", "HR", "OPS"}.issubset(step_templates)
 
 
 # --- generate_draft returns correct structure ---
@@ -138,6 +143,27 @@ class TestPersonalization:
         assert result["company"] == lead["company"]
         assert result["email"] == lead["email"]
         assert result["contact_name"] == lead["contact_name"]
+
+    def test_step_metadata_defaults_to_initial_step(self):
+        result = generate_draft(_gm_lead())
+        assert result["step_number"] == 1
+        assert result["campaign_name"] == "first_wave_local"
+
+    def test_generates_step_two_follow_up(self):
+        result = generate_draft(_hr_lead(), step_number=2)
+        assert result["step_number"] == 2
+        assert "Seguimiento" in result["subject"]
+
+    def test_generates_step_three_close_loop(self):
+        result = generate_draft(_ops_lead(), step_number=3)
+        assert result["step_number"] == 3
+        assert "Cierro" in result["subject"]
+
+    def test_invalid_step_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError):
+            generate_draft(_gm_lead(), step_number=4)
 
 
 # --- Spanish copy ---
