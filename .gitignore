@@ -41,6 +41,7 @@ ENV/
 
 # Prospecting data and exports
 *.xlsx
+!Empresarial AAA AA A y B.xlsx
 *.xls
 *.csv
 outbox/

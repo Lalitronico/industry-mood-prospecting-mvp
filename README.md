@@ -42,7 +42,7 @@ Fuente local esperada:
 Empresarial AAA AA A y B.xlsx
 ```
 
-El Excel real está ignorado por Git porque contiene datos de prospectos.
+El Excel real está incluido intencionalmente en este repositorio para que el workflow sea reproducible al compartirlo con el equipo.
 
 Resultados verificados con el archivo actual:
 
@@ -249,7 +249,7 @@ python export_approved.py --db drafts_queue.db
 
 Archivos ignorados por Git:
 
-- `*.xlsx`
+- `*.xlsx`, excepto `Empresarial AAA AA A y B.xlsx`
 - `*.xls`
 - `*.csv`
 - `*.db`
@@ -257,7 +257,7 @@ Archivos ignorados por Git:
 - `outbox/`
 - `.env`
 
-Esto evita subir el Excel de leads, bases SQLite locales, exports y mensajes generados.
+Esto evita subir bases SQLite locales, exports, outboxes y archivos adicionales de prospecting por accidente. La base `Empresarial AAA AA A y B.xlsx` es la única excepción versionada.
 
 ## Tests
 
