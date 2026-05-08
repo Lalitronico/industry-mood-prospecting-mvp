@@ -77,13 +77,24 @@ class FileOutboxBackend:
         return True
 
 
-def send_approved(db_path: str, backend) -> int:
-    """Send all approved drafts using the given backend. Returns count sent."""
-    from queue_db import has_terminal_status, is_suppressed, list_approved, mark_sent, update_status
+def send_approved(db_path: str, backend, limit: int | None = None) -> int:
+    """Send approved drafts using the given backend. Returns count sent.
+
+    `limit` caps successful sends, not skipped/suppressed drafts. This makes it
+    safe to run tiny first-wave batches while still cleaning invalid approved
+    drafts encountered before the limit is reached.
+    """
+    from queue_db import has_terminal_status, is_suppressed, list_approved, mark_sent, suppress_email, update_status
+    from validators import has_valid_email_syntax
 
     drafts = list_approved(db_path)
     count = 0
     for draft in drafts:
+        if limit is not None and count >= limit:
+            break
+        if not has_valid_email_syntax(draft.get("email")):
+            suppress_email(db_path, draft["email"], reason="invalid_email", source="send_approved")
+            continue
         if is_suppressed(db_path, draft["email"]) or has_terminal_status(
             db_path,
             draft["email"],

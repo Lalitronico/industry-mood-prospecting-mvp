@@ -24,7 +24,17 @@ def main():
         help="Send mode (default: dry-run)",
     )
     parser.add_argument("--outbox", default="outbox/", help="Outbox directory for file-outbox mode")
+    parser.add_argument("--limit", type=int, help="Maximum number of successful sends in this run")
+    parser.add_argument(
+        "--confirm-real-send",
+        action="store_true",
+        help="Required for --mode resend to prevent accidental real outreach",
+    )
     args = parser.parse_args()
+
+    if args.mode == "resend" and not args.confirm_real_send:
+        print("Refusing real Resend send without --confirm-real-send", file=sys.stderr)
+        sys.exit(2)
 
     if args.mode == "dry-run":
         backend = DryRunBackend()
@@ -36,7 +46,7 @@ def main():
         print(f"Unknown mode: {args.mode}", file=sys.stderr)
         sys.exit(1)
 
-    count = send_approved(args.db, backend)
+    count = send_approved(args.db, backend, limit=args.limit)
     print(f"\nSent {count} draft(s) via {args.mode}.")
 
 

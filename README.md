@@ -203,7 +203,7 @@ La suppression list evita nuevos drafts y bloquea el envío de drafts aprobados 
 Dry run:
 
 ```bash
-python send_drafts.py --db drafts_queue.db --mode dry-run
+python send_drafts.py --db drafts_queue.db --mode dry-run --limit 5
 ```
 
 File outbox:
@@ -217,7 +217,7 @@ Resend real:
 ```bash
 cp .env.example .env
 # llenar RESEND_API_KEY y OUTREACH_FROM_EMAIL
-python send_drafts.py --db drafts_queue.db --mode resend
+python send_drafts.py --db drafts_queue.db --mode resend --limit 5 --confirm-real-send
 ```
 
 Antes de usar Resend con contactos reales, configura SPF, DKIM y DMARC del dominio/subdominio de envío. Mantén volumen bajo al inicio.
@@ -301,7 +301,7 @@ python -m pytest -q
 Estado actual:
 
 ```text
-141 passed
+144 passed
 ```
 
 ## Roadmap
@@ -317,6 +317,7 @@ Completado:
 - Estados de reply/bounce.
 - Estados comerciales: positive reply, demo booked y not interested.
 - Sender controlado con dry-run, outbox y Resend.
+- Guardrails de envío: `--limit`, confirmación explícita para Resend real y supresión de emails inválidos.
 - Footer/opt-out operativo en drafts.
 - Reporte comercial básico por rol.
 - Smoke test de FastAPI.
