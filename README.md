@@ -77,6 +77,7 @@ Módulos principales:
 - `sender.py`: abstrae el envío con backends `dry-run`, `file-outbox` y `resend`.
 - `validators.py`: validación ligera de emails antes de operar con datos de contacto.
 - `reports.py`: resumen comercial básico del funnel por campaña y rol.
+- `docs/email_sending_setup.md`: pasos de configuración de Resend/DNS para `admin@industrymood.com`.
 - `app/main.py`: API FastAPI mínima.
 
 CLIs disponibles:
@@ -216,7 +217,7 @@ Resend real:
 
 ```bash
 cp .env.example .env
-# llenar RESEND_API_KEY y OUTREACH_FROM_EMAIL
+# llenar RESEND_API_KEY; OUTREACH_FROM_EMAIL ya queda como "Industry Mood <admin@industrymood.com>"
 python send_drafts.py --db drafts_queue.db --mode resend --limit 5 --confirm-real-send
 ```
 
