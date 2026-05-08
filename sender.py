@@ -8,7 +8,9 @@ Future backends (Resend, SMTP) can be added by implementing the same interface:
   .send(draft_dict) -> bool
 """
 
+import json
 import os
+import urllib.request
 
 
 class DryRunBackend:
@@ -17,6 +19,45 @@ class DryRunBackend:
     def send(self, draft: dict) -> bool:
         print(f"[DRY RUN] To: {draft['email']} | Subject: {draft['subject']}")
         return True
+
+
+class ResendBackend:
+    """Send approved drafts through the Resend email API."""
+
+    api_url = "https://api.resend.com/emails"
+
+    def __init__(self, api_key: str | None = None, from_email: str | None = None):
+        self.api_key = api_key or os.getenv("RESEND_API_KEY", "")
+        self.from_email = from_email or os.getenv("OUTREACH_FROM_EMAIL", "")
+        if not self.api_key:
+            raise ValueError("RESEND_API_KEY is required for ResendBackend")
+        if not self.from_email:
+            raise ValueError("OUTREACH_FROM_EMAIL is required for ResendBackend")
+
+    def send(self, draft: dict) -> bool:
+        payload = {
+            "from": self.from_email,
+            "to": [draft["email"]],
+            "subject": draft["subject"],
+            "text": draft["body_text"],
+        }
+        data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            self.api_url,
+            data=data,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                response.read()
+                return 200 <= response.status < 300
+        except Exception as exc:
+            print(f"[RESEND ERROR] To: {draft.get('email')} | {exc}")
+            return False
 
 
 class FileOutboxBackend:

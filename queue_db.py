@@ -18,6 +18,9 @@ VALID_STATUSES = {
     "sent",
     "suppressed",
     "replied",
+    "positive_reply",
+    "demo_booked",
+    "not_interested",
     "bounced",
 }
 
@@ -38,7 +41,10 @@ CREATE TABLE IF NOT EXISTS drafts (
     status        TEXT    NOT NULL DEFAULT 'pending_review',
     created_at    TEXT    NOT NULL,
     updated_at    TEXT    NOT NULL,
-    sent_at       TEXT
+    sent_at       TEXT,
+    positive_reply_at TEXT,
+    demo_booked_at    TEXT,
+    not_interested_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS suppressions (
@@ -105,6 +111,9 @@ def _migrate_drafts_table(conn: sqlite3.Connection) -> None:
         "step_number": "ALTER TABLE drafts ADD COLUMN step_number INTEGER NOT NULL DEFAULT 1",
         "lead_key": "ALTER TABLE drafts ADD COLUMN lead_key TEXT",
         "scheduled_at": "ALTER TABLE drafts ADD COLUMN scheduled_at TEXT",
+        "positive_reply_at": "ALTER TABLE drafts ADD COLUMN positive_reply_at TEXT",
+        "demo_booked_at": "ALTER TABLE drafts ADD COLUMN demo_booked_at TEXT",
+        "not_interested_at": "ALTER TABLE drafts ADD COLUMN not_interested_at TEXT",
     }
     for column, statement in migrations.items():
         if column not in existing:
@@ -409,6 +418,44 @@ def mark_bounced(db_path: str, draft_id: int) -> None:
         raise ValueError(f"Draft id {draft_id} not found")
     update_status(db_path, draft_id, "bounced")
     suppress_email(db_path, draft["email"], reason="bounced", source="mark_outcome")
+
+
+def _mark_commercial_outcome(db_path: str, draft_id: int, status: str, timestamp_column: str) -> None:
+    """Mark a commercial outcome and timestamp it."""
+    allowed_timestamp_columns = {
+        "positive_reply_at",
+        "demo_booked_at",
+        "not_interested_at",
+    }
+    if timestamp_column not in allowed_timestamp_columns:
+        raise ValueError(f"Invalid outcome timestamp column: {timestamp_column}")
+
+    now = _now()
+    conn = _connect(db_path)
+    cursor = conn.execute(
+        f"UPDATE drafts SET status = ?, {timestamp_column} = ?, updated_at = ? WHERE id = ?",
+        (status, now, now, draft_id),
+    )
+    conn.commit()
+    if cursor.rowcount == 0:
+        conn.close()
+        raise ValueError(f"Draft id {draft_id} not found")
+    conn.close()
+
+
+def mark_positive_reply(db_path: str, draft_id: int) -> None:
+    """Mark a draft/contact as a positive reply."""
+    _mark_commercial_outcome(db_path, draft_id, "positive_reply", "positive_reply_at")
+
+
+def mark_demo_booked(db_path: str, draft_id: int) -> None:
+    """Mark a draft/contact as converted to a booked demo."""
+    _mark_commercial_outcome(db_path, draft_id, "demo_booked", "demo_booked_at")
+
+
+def mark_not_interested(db_path: str, draft_id: int) -> None:
+    """Mark a draft/contact as not interested."""
+    _mark_commercial_outcome(db_path, draft_id, "not_interested", "not_interested_at")
 
 
 def update_status(db_path: str, draft_id: int, new_status: str) -> None:

@@ -8,6 +8,14 @@ the rest of the pipeline.
 from scoring import classify_role
 
 
+COMPLIANCE_FOOTER = (
+    "\n\n---\n"
+    "Industry Mood | Ciudad Juárez, Chihuahua, México\n"
+    "Si no desea recibir más mensajes de Industry Mood, responda a este correo "
+    "con la palabra 'remover' y lo retiraremos de la lista."
+)
+
+
 TEMPLATES = {
     "GM": {
         "subject": "Clima laboral en {company}",
@@ -184,7 +192,7 @@ def generate_draft(lead: dict, step_number: int = 1) -> dict:
     email = lead.get("email", "")
     return {
         "subject": template["subject"].format(**placeholders),
-        "body_text": template["body"].format(**placeholders),
+        "body_text": template["body"].format(**placeholders) + COMPLIANCE_FOOTER,
         "template_key": role_bucket,
         "role_bucket": role_bucket,
         "company": lead.get("company", ""),

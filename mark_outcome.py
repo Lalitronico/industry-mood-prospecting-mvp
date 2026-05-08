@@ -3,26 +3,47 @@
 
 Usage:
     python mark_outcome.py replied 12
+    python mark_outcome.py positive_reply 12
+    python mark_outcome.py demo_booked 12
+    python mark_outcome.py not_interested 12
     python mark_outcome.py bounced 12
 """
 
 import argparse
 
-from queue_db import init_queue, mark_bounced, mark_replied
+from queue_db import (
+    init_queue,
+    mark_bounced,
+    mark_demo_booked,
+    mark_not_interested,
+    mark_positive_reply,
+    mark_replied,
+)
 
 
 DEFAULT_DB = "drafts_queue.db"
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Mark replied or bounced outcomes.")
-    parser.add_argument("outcome", choices=["replied", "bounced"], help="Outcome to record")
+    parser = argparse.ArgumentParser(description="Mark commercial outcomes.")
+    parser.add_argument(
+        "outcome",
+        choices=["replied", "positive_reply", "demo_booked", "not_interested", "bounced"],
+        help="Outcome to record",
+    )
     parser.add_argument("ids", nargs="+", type=int, help="Draft id(s)")
     parser.add_argument("--db", default=DEFAULT_DB, help=f"Queue DB path (default: {DEFAULT_DB})")
     args = parser.parse_args()
 
     init_queue(args.db)
-    marker = mark_replied if args.outcome == "replied" else mark_bounced
+    markers = {
+        "replied": mark_replied,
+        "positive_reply": mark_positive_reply,
+        "demo_booked": mark_demo_booked,
+        "not_interested": mark_not_interested,
+        "bounced": mark_bounced,
+    }
+    marker = markers[args.outcome]
 
     for draft_id in args.ids:
         marker(args.db, draft_id)

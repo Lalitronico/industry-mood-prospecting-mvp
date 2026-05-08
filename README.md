@@ -20,19 +20,25 @@ Ya funciona:
 - Suprimir emails para no volver a contactarlos.
 - Exportar drafts aprobados a CSV.
 - Simular envío con `dry-run` o escribir mensajes a `outbox/`.
+- Enviar drafts aprobados por Resend cuando `RESEND_API_KEY` y `OUTREACH_FROM_EMAIL` están configurados.
+- Incluir footer operativo con identidad del remitente y opt-out manual en los drafts.
 - Marcar drafts como enviados.
 - Generar follow-ups vencidos para una secuencia de 3 pasos.
-- Marcar respuestas y rebotes para detener la secuencia.
+- Marcar respuestas, respuestas positivas, demos agendadas, rechazos y rebotes.
+- Generar reporte comercial básico por rol: enviados, replies, positive replies, demos, rechazos y bounces.
 - Levantar un backend FastAPI mínimo con `/health`.
 - Correr una suite de tests automatizados.
 
 No funciona todavía:
 
-- Envío real por Resend, SMTP, Gmail o Outlook.
 - Generación de drafts con LLM.
 - Tracking automático de replies desde inbox.
 - UI web de aprobación.
 - CRM completo o dashboard comercial.
+
+Funciona con preparación externa:
+
+- Envío real por Resend: requiere `.env`, `RESEND_API_KEY`, `OUTREACH_FROM_EMAIL` y dominio/subdominio configurado con SPF, DKIM y DMARC antes de usarlo con contactos reales.
 
 ## Datos Verificados
 
@@ -68,7 +74,9 @@ Módulos principales:
 - `scoring.py`: normaliza ciudad, clasifica rol, calcula score y recomienda leads.
 - `drafts.py`: genera emails de step 1, step 2 y step 3 con templates por rol.
 - `queue_db.py`: maneja la cola SQLite, estados, suppression list y reglas de follow-up.
-- `sender.py`: abstrae el envío con backends `dry-run` y `file-outbox`.
+- `sender.py`: abstrae el envío con backends `dry-run`, `file-outbox` y `resend`.
+- `validators.py`: validación ligera de emails antes de operar con datos de contacto.
+- `reports.py`: resumen comercial básico del funnel por campaña y rol.
 - `app/main.py`: API FastAPI mínima.
 
 CLIs disponibles:
@@ -80,7 +88,8 @@ CLIs disponibles:
 - `suppress_email.py`: agrega/lista emails suprimidos.
 - `send_drafts.py`: envía drafts aprobados usando backend controlado.
 - `generate_followups.py`: genera follow-ups vencidos.
-- `mark_outcome.py`: marca replies o bounces.
+- `mark_outcome.py`: marca replies, positive replies, demos, rechazos o bounces.
+- `report.py`: imprime métricas comerciales básicas por rol y campaña.
 - `export_approved.py`: exporta drafts aprobados a CSV.
 
 Estados de draft:
@@ -91,6 +100,9 @@ Estados de draft:
 - `suppressed`: bloqueado por suppression list, reply, bounce o decisión manual.
 - `sent`: enviado o procesado por backend de salida.
 - `replied`: el contacto respondió; se detiene la secuencia.
+- `positive_reply`: respuesta comercial positiva.
+- `demo_booked`: demo agendada.
+- `not_interested`: respuesta negativa explícita.
 - `bounced`: el email rebotó; se suprime el contacto.
 
 ## Setup
@@ -200,6 +212,16 @@ File outbox:
 python send_drafts.py --db drafts_queue.db --mode file-outbox --outbox outbox/
 ```
 
+Resend real:
+
+```bash
+cp .env.example .env
+# llenar RESEND_API_KEY y OUTREACH_FROM_EMAIL
+python send_drafts.py --db drafts_queue.db --mode resend
+```
+
+Antes de usar Resend con contactos reales, configura SPF, DKIM y DMARC del dominio/subdominio de envío. Mantén volumen bajo al inicio.
+
 Los drafts enviados pasan a `sent` y no se reenvían.
 
 ### 7. Generar follow-ups
@@ -231,6 +253,9 @@ Reglas actuales:
 
 ```bash
 python mark_outcome.py replied 12 --db drafts_queue.db
+python mark_outcome.py positive_reply 12 --db drafts_queue.db
+python mark_outcome.py demo_booked 12 --db drafts_queue.db
+python mark_outcome.py not_interested 12 --db drafts_queue.db
 python mark_outcome.py bounced 13 --db drafts_queue.db
 ```
 
@@ -238,7 +263,15 @@ python mark_outcome.py bounced 13 --db drafts_queue.db
 
 `bounced` detiene la secuencia y agrega el email a la suppression list.
 
-### 9. Exportar aprobados
+### 10. Reportar métricas comerciales
+
+```bash
+python report.py --db drafts_queue.db
+```
+
+El reporte muestra enviados, replies, positive replies, demos, rechazos y bounces, con desglose por rol.
+
+### 11. Exportar aprobados
 
 ```bash
 python export_approved.py --db drafts_queue.db -o approved.csv
@@ -268,7 +301,7 @@ python -m pytest -q
 Estado actual:
 
 ```text
-128 passed
+141 passed
 ```
 
 ## Roadmap
@@ -282,16 +315,18 @@ Completado:
 - Suppression list.
 - Secuencia de 3 pasos.
 - Estados de reply/bounce.
-- Sender controlado sin envío real.
+- Estados comerciales: positive reply, demo booked y not interested.
+- Sender controlado con dry-run, outbox y Resend.
+- Footer/opt-out operativo en drafts.
+- Reporte comercial básico por rol.
 - Smoke test de FastAPI.
 
 Siguiente recomendado:
 
-1. Integrar envío real con Resend o SMTP.
-2. Agregar configuración de dominio y deliverability: SPF, DKIM y DMARC.
+1. Configurar dominio/subdominio de envío y deliverability: SPF, DKIM y DMARC.
+2. Validar una primera cohorte de 5-10 envíos reales con Resend.
 3. Agregar LLM para drafts con contexto real de cada empresa.
-4. Crear una UI mínima de revisión/aprobación.
-5. Registrar métricas comerciales: sent, replied, positive reply, demo booked.
+4. Crear una UI mínima de revisión/aprobación solo si el CLI se vuelve lento.
 
 ## Nota Estratégica
 
