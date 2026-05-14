@@ -116,10 +116,10 @@ class TestRoleAwareTemplates:
 # --- Personalization ---
 
 class TestPersonalization:
-    def test_body_contains_company_name(self):
+    def test_body_uses_clean_company_reference_or_industry_context(self):
         lead = _gm_lead()
         result = generate_draft(lead)
-        assert lead["company"] in result["body_text"]
+        assert "Aceros del Norte" in result["subject"] or lead["company_type"].lower() in result["body_text"].lower()
 
     def test_body_contains_city(self):
         lead = _hr_lead()
@@ -132,10 +132,11 @@ class TestPersonalization:
         result = generate_draft(lead)
         assert lead["company_type"].lower() in result["body_text"].lower()
 
-    def test_subject_contains_company_name(self):
+    def test_subject_uses_clean_company_reference(self):
         lead = _gm_lead()
         result = generate_draft(lead)
-        assert lead["company"] in result["subject"]
+        assert "Aceros del Norte" in result["subject"]
+        assert "S.A." not in result["subject"]
 
     def test_metadata_carries_through(self):
         lead = _gm_lead()
@@ -200,3 +201,24 @@ class TestTone:
             for word in hype:
                 assert word not in text, \
                     f"Found hype word '{word}' in draft for {lead_fn.__name__}"
+
+    def test_no_mail_merge_artifacts(self):
+        bad_fragments = ["estimado/a", "sector empresa", "tamano", "rapida", "podria", "platica"]
+        for lead_fn in (_gm_lead, _hr_lead, _ops_lead):
+            result = generate_draft(lead_fn())
+            text = (result["subject"] + " " + result["body_text"]).lower()
+            for fragment in bad_fragments:
+                assert fragment not in text
+
+    def test_includes_human_signature_and_opt_out(self):
+        result = generate_draft(_gm_lead())
+        body = result["body_text"]
+        assert "Eduardo Vera" in body
+        assert "admin@industrymood.com" in body
+        assert "baja" in body.lower()
+
+    def test_uses_low_friction_cta(self):
+        result = generate_draft(_hr_lead())
+        body = result["body_text"].lower()
+        assert "le mando" in body or "enviarle un ejemplo" in body
+        assert "15 minutos" not in body

@@ -18,49 +18,54 @@ COMPLIANCE_FOOTER = (
 
 TEMPLATES = {
     "GM": {
-        "subject": "Clima laboral en {company}",
+        "subject": "¿Cómo está el ánimo del equipo en {company_short}?",
         "body": (
-            "Estimado/a {contact_name},\n\n"
-            "Le escribo brevemente porque en Industry Mood trabajamos con "
-            "empresas del sector {company_type} en {city}, como {company}, y creemos que "
-            "una encuesta de clima laboral rapida podria darle visibilidad "
-            "sobre como se siente su equipo hoy.{size_line}\n\n"
-            "Es un pulso de 5 minutos para sus colaboradores, con resultados "
-            "claros y accionables.\n\n"
-            "Tendria 15 minutos esta semana para una platica breve sobre "
-            "como funciona?\n\n"
-            "Quedo atento,\n"
-            "Industry Mood"
+            "Hola,\n\n"
+            "Soy Eduardo Vera de Industry Mood. Trabajamos con organizaciones de "
+            "{company_type} en {city} midiendo clima laboral con pulsos cortos, "
+            "no con encuestas anuales largas.\n\n"
+            "Una pregunta concreta: ¿hoy tienen forma de saber, en menos de una "
+            "semana, si el ánimo del equipo cambió o si hay señales tempranas de "
+            "rotación y desgaste?\n\n"
+            "Si le interesa, le mando un ejemplo breve del reporte que entregamos "
+            "para que lo revise sin compromiso. ¿Le sirve?\n\n"
+            "Eduardo Vera\n"
+            "Industry Mood\n"
+            "admin@industrymood.com\n\n"
+            "Si prefiere no recibir más correos, responda \"baja\" y lo retiro de la lista."
         ),
     },
     "HR": {
-        "subject": "Encuesta de pulso para el equipo de {company}",
+        "subject": "Pulso de clima laboral para {company_short}",
         "body": (
-            "Estimado/a {contact_name},\n\n"
-            "Se que medir el clima laboral de manera agil es uno de los retos "
-            "constantes en Recursos Humanos. En Industry Mood ayudamos a empresas "
-            "del sector {company_type} en {city} a tener un diagnostico rapido "
-            "del animo de sus equipos.{size_line}\n\n"
-            "La encuesta toma 5 minutos por persona y entrega resultados "
-            "listos para actuar.\n\n"
-            "Le parece si agendamos 15 minutos para mostrarle como funciona?\n\n"
-            "Saludos cordiales,\n"
-            "Industry Mood"
+            "Hola,\n\n"
+            "Soy Eduardo Vera de Industry Mood. Ayudamos a equipos de Recursos "
+            "Humanos en organizaciones de {company_type} en {city} a medir clima "
+            "laboral con una encuesta breve y resultados listos para revisar.\n\n"
+            "La idea es detectar señales de ánimo, rotación o desgaste antes de "
+            "que se conviertan en problemas más caros de atender.\n\n"
+            "Si le interesa, le mando un ejemplo breve del reporte que entregamos "
+            "para que lo revise sin compromiso. ¿Le sirve?\n\n"
+            "Eduardo Vera\n"
+            "Industry Mood\n"
+            "admin@industrymood.com\n\n"
+            "Si prefiere no recibir más correos, responda \"baja\" y lo retiro de la lista."
         ),
     },
     "OPS": {
-        "subject": "Clima laboral en operaciones - {company}",
+        "subject": "Pulso de clima en operaciones - {company_short}",
         "body": (
-            "Estimado/a {contact_name},\n\n"
-            "En areas de operaciones, la rotacion y el clima laboral impactan "
-            "directamente la productividad. En Industry Mood ayudamos a empresas "
-            "del sector {company_type} en {city} a medir el pulso de sus "
-            "equipos operativos de forma rapida.{size_line}\n\n"
-            "Es una encuesta de 5 minutos que entrega metricas claras sobre "
-            "el estado de animo del equipo.\n\n"
-            "Tendria 15 minutos para una conversacion breve?\n\n"
-            "Saludos,\n"
-            "Industry Mood"
+            "Hola,\n\n"
+            "Soy Eduardo Vera de Industry Mood. En operaciones, el clima laboral "
+            "termina impactando rotación, ausentismo y productividad. Trabajamos "
+            "con organizaciones de {company_type} en {city} para medir ese pulso "
+            "sin cargar al equipo con procesos largos.\n\n"
+            "Si le interesa, le mando un ejemplo breve del reporte que entregamos "
+            "para que lo revise sin compromiso. ¿Le sirve?\n\n"
+            "Eduardo Vera\n"
+            "Industry Mood\n"
+            "admin@industrymood.com\n\n"
+            "Si prefiere no recibir más correos, responda \"baja\" y lo retiro de la lista."
         ),
     },
 }
@@ -159,6 +164,30 @@ def _role_bucket(lead: dict) -> str:
     return role_bucket if role_bucket in TEMPLATES else "GM"
 
 
+def _clean_company_name(company: str) -> str:
+    """Return a human-readable company name without legal suffixes."""
+    cleaned = (company or "").strip()
+    suffixes = [
+        ", S.A. DE C.V.",
+        ", S.A.B. DE C.V.",
+        ", S. DE R.L. DE C.V.",
+        ", S. DE R.L.",
+        ", A.C.",
+        ", S.A.",
+        " S.A. DE C.V.",
+        " S.A.B. DE C.V.",
+        " S. DE R.L. DE C.V.",
+        " S. DE R.L.",
+        " A.C.",
+        " S.A.",
+    ]
+    upper = cleaned.upper()
+    for suffix in suffixes:
+        if upper.endswith(suffix):
+            return cleaned[: -len(suffix)].strip(" ,")
+    return cleaned
+
+
 def generate_draft(lead: dict, step_number: int = 1) -> dict:
     """Generate an outreach draft from a lead dict.
 
@@ -180,9 +209,11 @@ def generate_draft(lead: dict, step_number: int = 1) -> dict:
     if size in _SIZE_DESC:
         size_line = f" {_SIZE_DESC[size]}, el impacto es aun mas visible."
 
-    city = (lead.get("city") or "la region").strip()
+    city = (lead.get("city") or "la región").strip()
+    company = lead.get("company", "")
     placeholders = {
-        "company": lead.get("company", ""),
+        "company": company,
+        "company_short": _clean_company_name(company),
         "company_type": (lead.get("company_type") or "su industria").strip().lower(),
         "city": city,
         "contact_name": lead.get("contact_name", ""),
