@@ -41,14 +41,16 @@ class ResendBackend:
 
             requester = requests
 
-        self.api_key = (api_key or os.getenv("RESEND_API_KEY") or "").strip()
-        self.from_email = (
-            from_email
-            or os.getenv("OUTREACH_FROM_EMAIL")
-            or os.getenv("RESEND_FROM_EMAIL")
-            or ""
-        ).strip()
-        self.reply_to = (reply_to or os.getenv("RESEND_REPLY_TO") or "").strip()
+        self.api_key = ((os.getenv("RESEND_API_KEY") or "") if api_key is None else api_key or "").strip()
+        if from_email is None:
+            self.from_email = (
+                os.getenv("OUTREACH_FROM_EMAIL")
+                or os.getenv("RESEND_FROM_EMAIL")
+                or ""
+            ).strip()
+        else:
+            self.from_email = (from_email or "").strip()
+        self.reply_to = ((os.getenv("RESEND_REPLY_TO") or "") if reply_to is None else reply_to or "").strip()
         self.requester = requester
         self.timeout = timeout
 
