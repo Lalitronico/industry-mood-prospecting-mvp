@@ -6,7 +6,7 @@ import tempfile
 import pytest
 
 from queue_db import init_queue, enqueue_draft, update_status, get_draft, suppress_email
-from sender import send_approved, DryRunBackend, FileOutboxBackend
+from sender import send_approved, DryRunBackend, FileOutboxBackend, ResendBackend
 
 
 # --- Fixtures ---
@@ -99,6 +99,104 @@ class TestFileOutboxBackend:
         assert result is True
 
 
+# --- ResendBackend ---
+class _FakeResponse:
+    def __init__(self, status_code=200, text='{"id":"email_123"}'):
+        self.status_code = status_code
+        self.text = text
+
+    def json(self):
+        return {"id": "email_123"}
+
+
+class _FakeRequests:
+    def __init__(self, response=None):
+        self.response = response or _FakeResponse()
+        self.calls = []
+
+    def post(self, url, headers=None, json=None, timeout=None):
+        self.calls.append({
+            "url": url,
+            "headers": headers or {},
+            "json": json or {},
+            "timeout": timeout,
+        })
+        return self.response
+
+
+class TestResendBackend:
+    def test_requires_api_key(self):
+        with pytest.raises(ValueError, match="RESEND_API_KEY"):
+            ResendBackend(api_key="", from_email="hello@industrymood.com")
+
+    def test_requires_from_email(self):
+        with pytest.raises(ValueError, match="from_email"):
+            ResendBackend(api_key="test_key", from_email="")
+
+    def test_posts_expected_payload_to_resend(self):
+        fake = _FakeRequests()
+        backend = ResendBackend(
+            api_key="test_key",
+            from_email="Industry Mood <hola@industrymood.com>",
+            reply_to="lalo@industrymood.com",
+            requester=fake,
+        )
+        result = backend.send({
+            "id": 42,
+            "email": "cto@factory.mx",
+            "subject": "Clima laboral",
+            "body_text": "Estimado contacto...",
+        })
+        assert result is True
+        assert len(fake.calls) == 1
+        call = fake.calls[0]
+        assert call["url"] == "https://api.resend.com/emails"
+        assert call["headers"]["Authorization"] == "Bearer test_key"
+        assert call["headers"]["Idempotency-Key"] == "industry-mood-draft-42"
+        assert call["json"] == {
+            "from": "Industry Mood <hola@industrymood.com>",
+            "to": ["cto@factory.mx"],
+            "subject": "Clima laboral",
+            "text": "Estimado contacto...",
+            "reply_to": "lalo@industrymood.com",
+        }
+
+    def test_raises_on_resend_error(self):
+        fake = _FakeRequests(_FakeResponse(status_code=401, text="Unauthorized"))
+        backend = ResendBackend(
+            api_key="bad_key",
+            from_email="Industry Mood <hola@industrymood.com>",
+            requester=fake,
+        )
+        with pytest.raises(RuntimeError, match="Resend send failed"):
+            backend.send({"id": 1, "email": "a@b.mx", "subject": "S", "body_text": "B"})
+
+    def test_requires_draft_id_for_idempotency(self):
+        backend = ResendBackend(
+            api_key="test_key",
+            from_email="Industry Mood <hola@industrymood.com>",
+            requester=_FakeRequests(),
+        )
+        with pytest.raises(ValueError, match="draft id"):
+            backend.send({"email": "a@b.mx", "subject": "S", "body_text": "B"})
+
+    def test_network_error_is_wrapped_without_api_key(self):
+        class ExplodingRequests:
+            def post(self, *args, **kwargs):
+                raise RuntimeError("network down with re_secret_should_not_leak")
+
+        backend = ResendBackend(
+            api_key="re_secret_should_not_leak",
+            from_email="Industry Mood <hola@industrymood.com>",
+            requester=ExplodingRequests(),
+        )
+        with pytest.raises(RuntimeError) as exc:
+            backend.send({"id": 1, "email": "a@b.mx", "subject": "S", "body_text": "B"})
+        message = str(exc.value)
+        assert "Resend request failed" in message
+        assert "re_secret_should_not_leak" not in message
+
+
 # --- send_approved integration ---
 
 class TestSendApproved:
@@ -110,6 +208,46 @@ class TestSendApproved:
         backend = DryRunBackend()
         sent_count = send_approved(db, backend)
         assert sent_count == 1
+
+    def test_respects_limit(self, db):
+        id1 = enqueue_draft(db, _sample("A", "a@a.mx"))
+        id2 = enqueue_draft(db, _sample("B", "b@b.mx"))
+        _approve(db, id1)
+        _approve(db, id2)
+        backend = DryRunBackend()
+        sent_count = send_approved(db, backend, limit=1)
+        assert sent_count == 1
+        assert get_draft(db, id1)["status"] == "sent"
+        assert get_draft(db, id2)["status"] == "approved"
+
+    def test_limit_applies_after_suppression_filter(self, db):
+        id1 = enqueue_draft(db, _sample("A", "a@a.mx"))
+        id2 = enqueue_draft(db, _sample("B", "b@b.mx"))
+        _approve(db, id1)
+        _approve(db, id2)
+        suppress_email(db, "a@a.mx", reason="unsubscribed")
+        backend = DryRunBackend()
+        sent_count = send_approved(db, backend, limit=1)
+        assert sent_count == 1
+        assert get_draft(db, id1)["status"] == "suppressed"
+        assert get_draft(db, id2)["status"] == "sent"
+
+    def test_failed_send_marks_failed_and_continues(self, db, capsys):
+        class FailsForFirst:
+            def send(self, draft):
+                if draft["email"] == "a@a.mx":
+                    raise RuntimeError("boom")
+                return True
+
+        id1 = enqueue_draft(db, _sample("A", "a@a.mx"))
+        id2 = enqueue_draft(db, _sample("B", "b@b.mx"))
+        _approve(db, id1)
+        _approve(db, id2)
+        sent_count = send_approved(db, FailsForFirst(), limit=2)
+        assert sent_count == 1
+        assert get_draft(db, id1)["status"] == "failed"
+        assert get_draft(db, id2)["status"] == "sent"
+        assert "Failed draft" in capsys.readouterr().err
 
     def test_marks_sent_after_processing(self, db):
         id1 = enqueue_draft(db, _sample())

@@ -16,6 +16,7 @@ VALID_STATUSES = {
     "approved",
     "rejected",
     "sent",
+    "failed",
     "suppressed",
     "replied",
     "positive_reply",

@@ -19,7 +19,7 @@ Ya funciona:
 - Revisar, aprobar, rechazar y listar drafts.
 - Suprimir emails para no volver a contactarlos.
 - Exportar drafts aprobados a CSV.
-- Simular envío con `dry-run` o escribir mensajes a `outbox/`.
+- Simular envío con `dry-run`, escribir mensajes a `outbox/` o enviar por Resend con confirmación explícita.
 - Enviar drafts aprobados por Resend cuando `RESEND_API_KEY` y `OUTREACH_FROM_EMAIL` están configurados.
 - Incluir footer operativo con identidad del remitente y opt-out manual en los drafts.
 - Marcar drafts como enviados.
@@ -31,6 +31,7 @@ Ya funciona:
 
 No funciona todavía:
 
+- SMTP, Gmail u Outlook.
 - Generación de drafts con LLM.
 - Tracking automático de replies desde inbox.
 - UI web de aprobación.
@@ -99,6 +100,7 @@ Estados de draft:
 - `approved`: aprobado para envío.
 - `rejected`: descartado.
 - `suppressed`: bloqueado por suppression list, reply, bounce o decisión manual.
+- `failed`: intento de envío real falló; revisar error y decidir reintento/manual.
 - `sent`: enviado o procesado por backend de salida.
 - `replied`: el contacto respondió; se detiene la secuencia.
 - `positive_reply`: respuesta comercial positiva.
@@ -213,17 +215,25 @@ File outbox:
 python send_drafts.py --db drafts_queue.db --mode file-outbox --outbox outbox/
 ```
 
+Los drafts enviados pasan a `sent` y no se reenvían. Nota: `dry-run` no manda emails reales, pero sí marca los drafts como `sent`; usa una DB temporal o `file-outbox` si solo quieres revisar/copiar contenido.
+
 Resend real:
 
 ```bash
 cp .env.example .env
 # llenar RESEND_API_KEY; OUTREACH_FROM_EMAIL ya queda como "Industry Mood <admin@industrymood.com>"
-python send_drafts.py --db drafts_queue.db --mode resend --limit 5 --confirm-real-send
+python send_drafts.py --db drafts_queue.db --mode resend --limit 3 --confirm-send SEND
 ```
 
 Antes de usar Resend con contactos reales, configura SPF, DKIM y DMARC del dominio/subdominio de envío. Mantén volumen bajo al inicio.
 
-Los drafts enviados pasan a `sent` y no se reenvían.
+Guardrails del modo Resend:
+
+- Requiere un dominio/remitente verificado en Resend.
+- Requiere `RESEND_API_KEY`.
+- Requiere `--limit` y `--confirm-send SEND` para evitar envíos accidentales.
+- Usa batches pequeños para calentar el canal gradualmente.
+- Cada envío usa una `Idempotency-Key` con campaña, paso, draft y hash de email.
 
 ### 7. Generar follow-ups
 
@@ -302,7 +312,7 @@ python -m pytest -q
 Estado actual:
 
 ```text
-144 passed
+143 passed
 ```
 
 ## Roadmap
@@ -317,8 +327,8 @@ Completado:
 - Secuencia de 3 pasos.
 - Estados de reply/bounce.
 - Estados comerciales: positive reply, demo booked y not interested.
-- Sender controlado con dry-run, outbox y Resend.
-- Guardrails de envío: `--limit`, confirmación explícita para Resend real y supresión de emails inválidos.
+- Sender controlado con `dry-run`, `file-outbox` y Resend real con confirmación explícita.
+- Guardrails de envío: `--limit`, `--confirm-send SEND` y supresión de emails inválidos.
 - Footer/opt-out operativo en drafts.
 - Reporte comercial básico por rol.
 - Smoke test de FastAPI.
@@ -326,7 +336,7 @@ Completado:
 Siguiente recomendado:
 
 1. Configurar dominio/subdominio de envío y deliverability: SPF, DKIM y DMARC.
-2. Validar una primera cohorte de 5-10 envíos reales con Resend.
+2. Correr primera ola real con Resend en batches pequeños (`--limit 3` a `--limit 10`).
 3. Agregar LLM para drafts con contexto real de cada empresa.
 4. Crear una UI mínima de revisión/aprobación solo si el CLI se vuelve lento.
 

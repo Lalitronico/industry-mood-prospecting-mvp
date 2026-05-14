@@ -1,16 +1,18 @@
-"""Controlled sender abstraction — stdlib only.
+"""Controlled sender abstraction.
 
 Backends:
-  - DryRunBackend: prints what would be sent (no side effects)
+  - DryRunBackend: prints what would be sent (no real email)
   - FileOutboxBackend: writes one .txt file per draft into an outbox directory
+  - ResendBackend: sends approved drafts through the Resend Email API
 
-Future backends (Resend, SMTP) can be added by implementing the same interface:
+Backends implement:
   .send(draft_dict) -> bool
 """
 
+import hashlib
 import json
 import os
-import urllib.request
+import sys
 
 
 class DryRunBackend:
@@ -22,17 +24,49 @@ class DryRunBackend:
 
 
 class ResendBackend:
-    """Send approved drafts through the Resend email API."""
+    """Send one approved draft through the Resend Email API."""
 
-    api_url = "https://api.resend.com/emails"
+    API_URL = "https://api.resend.com/emails"
 
-    def __init__(self, api_key: str | None = None, from_email: str | None = None):
-        self.api_key = api_key or os.getenv("RESEND_API_KEY", "")
-        self.from_email = from_email or os.getenv("OUTREACH_FROM_EMAIL", "")
+    def __init__(
+        self,
+        api_key: str | None = None,
+        from_email: str | None = None,
+        reply_to: str | None = None,
+        requester=None,
+        timeout: int = 30,
+    ):
+        if requester is None:
+            import requests
+
+            requester = requests
+
+        self.api_key = (api_key or os.getenv("RESEND_API_KEY") or "").strip()
+        self.from_email = (
+            from_email
+            or os.getenv("OUTREACH_FROM_EMAIL")
+            or os.getenv("RESEND_FROM_EMAIL")
+            or ""
+        ).strip()
+        self.reply_to = (reply_to or os.getenv("RESEND_REPLY_TO") or "").strip()
+        self.requester = requester
+        self.timeout = timeout
+
         if not self.api_key:
-            raise ValueError("RESEND_API_KEY is required for ResendBackend")
+            raise ValueError("RESEND_API_KEY is required for Resend sending")
         if not self.from_email:
-            raise ValueError("OUTREACH_FROM_EMAIL is required for ResendBackend")
+            raise ValueError("from_email or OUTREACH_FROM_EMAIL is required for Resend sending")
+
+    @staticmethod
+    def _idempotency_key(draft: dict) -> str:
+        draft_id = draft.get("id")
+        if draft_id is None:
+            raise ValueError("draft id is required for Resend idempotency")
+        campaign = draft.get("campaign_name") or "first_wave_local"
+        step = draft.get("step_number") or 1
+        email = (draft.get("email") or "").strip().lower()
+        email_hash = hashlib.sha256(email.encode("utf-8")).hexdigest()[:12]
+        return f"industry-mood-{campaign}-step-{step}-draft-{draft_id}-{email_hash}"
 
     def send(self, draft: dict) -> bool:
         payload = {
@@ -41,23 +75,30 @@ class ResendBackend:
             "subject": draft["subject"],
             "text": draft["body_text"],
         }
-        data = json.dumps(payload).encode("utf-8")
-        request = urllib.request.Request(
-            self.api_url,
-            data=data,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
+        if self.reply_to:
+            payload["reply_to"] = self.reply_to
+
+        draft_id = draft.get("id")
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "Idempotency-Key": self._idempotency_key(draft),
+        }
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                response.read()
-                return 200 <= response.status < 300
-        except Exception as exc:
-            print(f"[RESEND ERROR] To: {draft.get('email')} | {exc}")
-            return False
+            response = self.requester.post(
+                self.API_URL,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+            )
+        except Exception:
+            raise RuntimeError(f"Resend request failed for draft {draft_id}") from None
+        if not 200 <= response.status_code < 300:
+            raise RuntimeError(
+                f"Resend send failed for draft {draft_id}: "
+                f"HTTP {response.status_code} {response.text}"
+            )
+        return True
 
 
 class FileOutboxBackend:
@@ -102,7 +143,15 @@ def send_approved(db_path: str, backend, limit: int | None = None) -> int:
         ):
             update_status(db_path, draft["id"], "suppressed")
             continue
-        ok = backend.send(draft)
+        try:
+            ok = backend.send(draft)
+        except Exception as exc:
+            update_status(db_path, draft["id"], "failed")
+            print(
+                f"Failed draft #{draft['id']} ({draft['email']}): {exc}",
+                file=sys.stderr,
+            )
+            continue
         if ok:
             mark_sent(db_path, draft["id"])
             count += 1
