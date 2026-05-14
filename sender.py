@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import sys
+import urllib.request
 
 
 class DryRunBackend:
@@ -36,11 +37,6 @@ class ResendBackend:
         requester=None,
         timeout: int = 30,
     ):
-        if requester is None:
-            import requests
-
-            requester = requests
-
         self.api_key = ((os.getenv("RESEND_API_KEY") or "") if api_key is None else api_key or "").strip()
         if from_email is None:
             self.from_email = (
@@ -64,13 +60,12 @@ class ResendBackend:
         draft_id = draft.get("id")
         if draft_id is None:
             raise ValueError("draft id is required for Resend idempotency")
-        campaign = draft.get("campaign_name") or "first_wave_local"
-        step = draft.get("step_number") or 1
-        email = (draft.get("email") or "").strip().lower()
-        email_hash = hashlib.sha256(email.encode("utf-8")).hexdigest()[:12]
-        return f"industry-mood-{campaign}-step-{step}-draft-{draft_id}-{email_hash}"
+        campaign = draft.get("campaign_name", "first_wave_local")
+        step = draft.get("step_number", 1)
+        email_hash = hashlib.sha256(draft["email"].strip().lower().encode("utf-8")).hexdigest()[:12]
+        return f"industry-mood-{campaign}-s{step}-d{draft_id}-{email_hash}"
 
-    def send(self, draft: dict) -> bool:
+    def _payload(self, draft: dict) -> dict:
         payload = {
             "from": self.from_email,
             "to": [draft["email"]],
@@ -79,13 +74,36 @@ class ResendBackend:
         }
         if self.reply_to:
             payload["reply_to"] = self.reply_to
+        return payload
 
-        draft_id = draft.get("id")
-        headers = {
+    def _headers(self, draft: dict) -> dict:
+        return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
             "Idempotency-Key": self._idempotency_key(draft),
         }
+
+    def send(self, draft: dict) -> bool:
+        draft_id = draft.get("id")
+        payload = self._payload(draft)
+        headers = self._headers(draft)
+
+        if self.requester is None:
+            data = json.dumps(payload).encode("utf-8")
+            request = urllib.request.Request(
+                self.API_URL,
+                data=data,
+                headers=headers,
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    response.read()
+                    return 200 <= response.status < 300
+            except Exception as exc:
+                print(f"[RESEND ERROR] To: {draft.get('email')} | {exc}")
+                return False
+
         try:
             response = self.requester.post(
                 self.API_URL,

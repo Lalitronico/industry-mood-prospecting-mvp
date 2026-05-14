@@ -233,7 +233,7 @@ Guardrails del modo Resend:
 - Requiere `RESEND_API_KEY`.
 - Requiere `--limit` y `--confirm-send SEND` para evitar envíos accidentales.
 - Usa batches pequeños para calentar el canal gradualmente.
-- Cada envío usa una `Idempotency-Key` con campaña, paso, draft y hash de email.
+- Cada envío usa una `Idempotency-Key` estable basada en campaña, paso, ID local y hash del email.
 
 ### 7. Generar follow-ups
 

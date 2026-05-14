@@ -152,7 +152,7 @@ class TestResendBackend:
         call = fake.calls[0]
         assert call["url"] == "https://api.resend.com/emails"
         assert call["headers"]["Authorization"] == "Bearer test_key"
-        assert call["headers"]["Idempotency-Key"] == "industry-mood-draft-42"
+        assert call["headers"]["Idempotency-Key"].startswith("industry-mood-first_wave_local-s1-d42-")
         assert call["json"] == {
             "from": "Industry Mood <hola@industrymood.com>",
             "to": ["cto@factory.mx"],
